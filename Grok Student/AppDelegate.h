@@ -6,9 +6,11 @@
 //
 
 #import <UIKit/UIKit.h>
+@class GrokServer;
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 
+@property (nonatomic, strong, readonly) GrokServer *grokServer;
 
 @end
 

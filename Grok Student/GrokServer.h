@@ -1,16 +1,19 @@
-//
-//  GrokServer.h
-//  Grok Student
-//
-//  Created by Christoph Zimnitski on 1/7/26.
-//
-
 #import <Foundation/Foundation.h>
-
-NS_ASSUME_NONNULL_BEGIN
+#import <GCDWebServer/GCDWebServer.h>
 
 @interface GrokServer : NSObject
 
-@end
+@property (nonatomic, assign, readonly) NSInteger port;
+@property (nonatomic, strong, readonly) GCDWebServer *webServer;
+@property (nonatomic, copy) NSString *bonjourName;
+@property (nonatomic, strong) NSString *selectedAPI;
 
-NS_ASSUME_NONNULL_END
+- (BOOL)startServer;
+- (void)stopServer;
+
+- (void)clearHistory;
+
+// Correct — only method, no property
+- (NSString *)localIPAddress;
+
+@end
