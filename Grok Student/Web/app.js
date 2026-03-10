@@ -4,45 +4,6 @@ const sendBtn = document.getElementById('send-btn');
 const clearBtn = document.getElementById('clear-btn');
 const themeToggle = document.getElementById('theme-toggle');
 
-function applyMathRendering(element) {
-    if (typeof renderMathInElement !== 'undefined') {
-        renderMathInElement(element, {
-            delimiters: [
-                {left: '$$', right: '$$', display: true},
-                {left: '\\[', right: '\\]', display: true},
-                {left: '$', right: '$', display: false},
-                {left: '\\(', right: '\\)', display: false}
-            ],
-            throwOnError: false
-        });
-    }
-}
-
-function setupKaTeX() {
-    if (document.getElementById('katex-css')) return;
-
-    const css = document.createElement('link');
-    css.id = 'katex-css';
-    css.rel = 'stylesheet';
-    css.crossOrigin = 'anonymous';
-    css.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
-    document.head.appendChild(css);
-
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js';
-    script.crossOrigin = 'anonymous';
-    script.onload = () => {
-        const autoRender = document.createElement('script');
-        autoRender.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js';
-        autoRender.crossOrigin = 'anonymous';
-        autoRender.onload = () => {
-            document.querySelectorAll('.message.grok').forEach(applyMathRendering);
-        };
-        document.head.appendChild(autoRender);
-    };
-    document.head.appendChild(script);
-}
-
 function setupBranding() {
     let link = document.querySelector('link[rel="icon"]');
     if (!link) {
@@ -52,6 +13,74 @@ function setupBranding() {
     }
     // Use the static asset from the Web folder
     link.href = '/logo.png';
+}
+
+// Setup Marked with KaTeX extensions
+if (typeof marked !== 'undefined') {
+    const blockMath = {
+        name: 'blockMath',
+        level: 'block',
+        start(src) { return src.match(/\$\$|\\\[/)?.index; },
+        tokenizer(src, tokens) {
+            const match = /^\$\$([\s\S]+?)\$\$|^\\\[([\s\S]+?)\\\]/.exec(src);
+            if (match) {
+                return {
+                    type: 'blockMath',
+                    raw: match[0],
+                    math: match[1] || match[2]
+                };
+            }
+        },
+        renderer(token) {
+            if (typeof katex !== 'undefined') {
+                try {
+                    return katex.renderToString(token.math, { displayMode: true, throwOnError: false });
+                } catch(e) {
+                    console.error('KaTeX rendering error:', e);
+                }
+            }
+            return token.raw;
+        }
+    };
+
+    const inlineMath = {
+        name: 'inlineMath',
+        level: 'inline',
+        start(src) { return src.match(/\$|\\\(/)?.index; },
+        tokenizer(src, tokens) {
+            const match = /^\$([^$]+?)\$|^\\\(([\s\S]+?)\\\)/.exec(src);
+            if (match) {
+                // Ignore currency (e.g. $10)
+                if (match[0].startsWith('$') && /^\d/.test((match[1] || '').trim())) {
+                    return;
+                }
+                return {
+                    type: 'inlineMath',
+                    raw: match[0],
+                    math: match[1] || match[2]
+                };
+            }
+        },
+        renderer(token) {
+            if (typeof katex !== 'undefined') {
+                try {
+                    return katex.renderToString(token.math, { displayMode: false, throwOnError: false });
+                } catch(e) {
+                    console.error('KaTeX rendering error:', e);
+                }
+            }
+            return token.raw;
+        }
+    };
+
+    marked.use({ extensions: [blockMath, inlineMath] });
+    marked.setOptions({
+        gfm: true,
+        breaks: true,
+        smartLists: true,
+        smartypants: false,
+        mangle: false
+    });
 }
 
 // Theme handling
@@ -81,7 +110,7 @@ function updateHljsTheme() {
 setTheme(currentTheme);
 updateHljsTheme();
 setupBranding();
-setupKaTeX();
+
 // Update on theme toggle
 themeToggle.addEventListener('click', () => {
     currentThemeIndex = (currentThemeIndex + 1) % themes.length;
@@ -220,62 +249,15 @@ function addMessage(sender, text) {
 
     if (sender === 'grok') {
         let html = text;
-        let mathBlocks = [];
-        let processedText = text;
-
-        // Shield block math
-        processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (match) => {
-            mathBlocks.push(match);
-            return `%%%MATH_${mathBlocks.length - 1}%%%`;
-        });
-
-        // Shield inline math, while ignoring normal currency amounts (e.g. $10)
-        processedText = processedText.replace(/(^|[^\\])\$((?:\\.|[^$])+?)\$/g, (match, prefix, content) => {
-            if (/^\d/.test(content.trim())) {
-                return match;
-            }
-            mathBlocks.push('$' + content + '$');
-            return prefix + `%%%MATH_${mathBlocks.length - 1}%%%`;
-        });
-
-        // Shield \( ... \) and \[ ... \]
-        processedText = processedText.replace(/\\\(([\s\S]+?)\\\)/g, (match) => {
-            mathBlocks.push(match);
-            return `%%%MATH_${mathBlocks.length - 1}%%%`;
-        });
-        processedText = processedText.replace(/\\\[([\s\S]+?)\\\]/g, (match) => {
-            mathBlocks.push(match);
-            return `%%%MATH_${mathBlocks.length - 1}%%%`;
-        });
-
         try {
             if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
-                marked.setOptions({
-                    gfm: true,
-                    breaks: true,
-                    smartLists: true,
-                    smartypants: false,
-                    mangle: false
-                });
-                html = marked.parse(processedText);
-            } else {
-                html = processedText;
+                html = marked.parse(text);
             }
         } catch (e) {
             console.error('Markdown parsing failed:', e);
-            html = processedText;
         }
 
-        // Restore math blocks safely
-        mathBlocks.forEach((math, i) => {
-            let escapedMath = math.replace(/&/g, "&amp;")
-                                  .replace(/</g, "&lt;")
-                                  .replace(/>/g, "&gt;");
-            html = html.replace(`%%%MATH_${i}%%%`, () => escapedMath);
-        });
-
         msgDiv.innerHTML = html;
-        applyMathRendering(msgDiv);
 
         setTimeout(() => {
             const pres = msgDiv.querySelectorAll('pre');
