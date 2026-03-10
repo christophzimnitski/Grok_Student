@@ -146,8 +146,8 @@
             cursor: not-allowed;
         }
 
-        #clear-btn { background: #ff3b30; }
-
+        #upload-btn { background: #34c759; } /* iOS Green */
+        #clear-btn { background: #ff3b30; } /* iOS Red */
         #theme-toggle { padding: 10px 14px; font-size: 16px; background: #666; }
 
         /* Thinking animation */
@@ -224,12 +224,22 @@
 
     <div id="chat-container" aria-live="polite" role="log"></div>
 
+    <div id="image-preview-container" style="display: none; padding: 12px 16px; background: var(--input-bg); border-top: 1px solid var(--border);">
+        <div style="position: relative; display: inline-block;">
+            <img id="preview-img" style="max-height: 120px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            <button id="remove-btn" type="button" style="position: absolute; top: -10px; right: -10px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer;">✕</button>
+        </div>
+    </div>
+
     <div id="input-container">
+        <button id="upload-btn" type="button">Upload</button>
         <textarea id="prompt" rows="1" placeholder="Ask Grok Student anything..."></textarea>
         <button id="send-btn" type="button">Send</button>
         <button id="clear-btn" type="button">Clear</button>
         <button id="theme-toggle" type="button">Theme</button>
     </div>
+
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
 
     <!-- Markdown Parser -->
     <script src="marked.min.js"></script>

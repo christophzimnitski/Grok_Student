@@ -57,16 +57,62 @@
                    processBlock:^GCDWebServerResponse *(GCDWebServerRequest *request) {
         
         GCDWebServerDataRequest *dataRequest = (GCDWebServerDataRequest *)request;
-        NSString *userPrompt = dataRequest.text;
         
-        if (!userPrompt || userPrompt.length == 0) {
+        NSError *jsonError = nil;
+        NSDictionary *jsonBody = [NSJSONSerialization JSONObjectWithData:dataRequest.data options:0 error:&jsonError];
+        
+        NSString *userPrompt = nil;
+        NSString *base64Image = nil;
+        
+        if (jsonBody && [jsonBody isKindOfClass:[NSDictionary class]]) {
+            id textObj = jsonBody[@"text"];
+            if ([textObj isKindOfClass:[NSString class]]) {
+                userPrompt = textObj;
+            }
+            
+            id imageObj = jsonBody[@"image"];
+            if ([imageObj isKindOfClass:[NSString class]]) {
+                base64Image = imageObj;
+            }
+        } else {
+            // Fallback for plain text parsing
+            userPrompt = dataRequest.text;
+        }
+        
+        if ((!userPrompt || userPrompt.length == 0) && (!base64Image || base64Image.length == 0)) {
             return [GCDWebServerDataResponse responseWithText:@"Error: Empty prompt"];
         }
         
         NSLog(@"User prompt: %@", userPrompt);
         
+        NSMutableArray *parts = [NSMutableArray array];
+        if (userPrompt && userPrompt.length > 0) {
+            [parts addObject:@{ @"text": userPrompt }];
+        }
+        
+        if (base64Image && base64Image.length > 0) {
+            NSString *cleanBase64 = base64Image;
+            NSRange range = [base64Image rangeOfString:@"base64,"];
+            if (range.location != NSNotFound) {
+                cleanBase64 = [base64Image substringFromIndex:range.location + range.length];
+                
+                NSString *mimeType = @"image/jpeg"; // Default
+                NSRange mimeRange = [base64Image rangeOfString:@";"];
+                if (mimeRange.location != NSNotFound && mimeRange.location > 5) {
+                    mimeType = [base64Image substringWithRange:NSMakeRange(5, mimeRange.location - 5)];
+                }
+                
+                [parts addObject:@{
+                    @"inlineData": @{
+                        @"mimeType": mimeType,
+                        @"data": cleanBase64
+                    }
+                }];
+            }
+        }
+        
         [self.chatHistory addObject:@{ @"role": @"user",
-                                       @"parts": @[ @{ @"text": userPrompt } ] }];
+                                       @"parts": parts }];
         
         NSString *assistantResponse = [self callAPIWithHistory];
         
@@ -139,7 +185,16 @@
             NSArray *parts = entry[@"parts"];
 
             if (parts.count > 0) {
-                NSString *content = parts[0][@"text"] ?: @"";
+                NSMutableString *content = [NSMutableString string];
+                for (NSDictionary *part in parts) {
+                    if (part[@"text"]) {
+                        if (content.length > 0) [content appendString:@"\n"];
+                        [content appendString:part[@"text"]];
+                    } else if (part[@"inlineData"]) {
+                        if (content.length > 0) [content appendString:@"\n"];
+                        [content appendString:@"[Image attached but ignored; Groq does not support image input in this mode]"];
+                    }
+                }
 
                 NSString *groqRole = [role isEqualToString:@"user"] ? @"user" : ([role isEqualToString:@"model"] ? @"assistant" : nil);
                 if (groqRole) {

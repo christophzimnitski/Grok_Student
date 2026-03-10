@@ -3,6 +3,11 @@ const promptInput = document.getElementById('prompt');
 const sendBtn = document.getElementById('send-btn');
 const clearBtn = document.getElementById('clear-btn');
 const themeToggle = document.getElementById('theme-toggle');
+const uploadBtn = document.getElementById('upload-btn');
+const fileInput = document.getElementById('file-input');
+const previewContainer = document.getElementById('image-preview-container');
+const previewImg = document.getElementById('preview-img');
+const removeBtn = document.getElementById('remove-btn');
 
 function setupBranding() {
     let link = document.querySelector('link[rel="icon"]');
@@ -15,65 +20,8 @@ function setupBranding() {
     link.href = '/logo.png';
 }
 
-// Setup Marked with KaTeX extensions
+// Setup Marked options (KaTeX handled during message rendering now to prevent conflicts)
 if (typeof marked !== 'undefined') {
-    const blockMath = {
-        name: 'blockMath',
-        level: 'block',
-        start(src) { return src.match(/\$\$|\\\[/)?.index; },
-        tokenizer(src, tokens) {
-            const match = /^\$\$([\s\S]+?)\$\$|^\\\[([\s\S]+?)\\\]/.exec(src);
-            if (match) {
-                return {
-                    type: 'blockMath',
-                    raw: match[0],
-                    math: match[1] || match[2]
-                };
-            }
-        },
-        renderer(token) {
-            if (typeof katex !== 'undefined') {
-                try {
-                    return katex.renderToString(token.math, { displayMode: true, throwOnError: false });
-                } catch(e) {
-                    console.error('KaTeX rendering error:', e);
-                }
-            }
-            return token.raw;
-        }
-    };
-
-    const inlineMath = {
-        name: 'inlineMath',
-        level: 'inline',
-        start(src) { return src.match(/\$|\\\(/)?.index; },
-        tokenizer(src, tokens) {
-            const match = /^\$([^$]+?)\$|^\\\(([\s\S]+?)\\\)/.exec(src);
-            if (match) {
-                // Ignore currency (e.g. $10)
-                if (match[0].startsWith('$') && /^\d/.test((match[1] || '').trim())) {
-                    return;
-                }
-                return {
-                    type: 'inlineMath',
-                    raw: match[0],
-                    math: match[1] || match[2]
-                };
-            }
-        },
-        renderer(token) {
-            if (typeof katex !== 'undefined') {
-                try {
-                    return katex.renderToString(token.math, { displayMode: false, throwOnError: false });
-                } catch(e) {
-                    console.error('KaTeX rendering error:', e);
-                }
-            }
-            return token.raw;
-        }
-    };
-
-    marked.use({ extensions: [blockMath, inlineMath] });
     marked.setOptions({
         gfm: true,
         breaks: true,
@@ -141,6 +89,52 @@ promptInput.addEventListener('input', () => {
     promptInput.style.height = `${promptInput.scrollHeight}px`;
 });
 
+let currentImageBase64 = null;
+
+function showImagePreview(src) {
+    previewImg.src = src;
+    previewContainer.style.display = 'block';
+}
+
+function removeImagePreview() {
+    currentImageBase64 = null;
+    previewImg.src = '';
+    previewContainer.style.display = 'none';
+    fileInput.value = '';
+}
+
+removeBtn.onclick = removeImagePreview;
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            currentImageBase64 = event.target.result;
+            showImagePreview(currentImageBase64);
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    }
+});
+
+uploadBtn.addEventListener('click', () => fileInput.click());
+
+// Handle pasting images
+promptInput.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                currentImageBase64 = event.target.result;
+                showImagePreview(currentImageBase64);
+            };
+            reader.readAsDataURL(blob);
+        }
+    }
+});
+
 // Send on Enter without Shift
 promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -161,28 +155,37 @@ clearBtn.addEventListener('click', async () => {
     addMessage('grok', WELCOME_MESSAGE);
     promptInput.value = '';
     promptInput.style.height = 'auto';
+    removeImagePreview();
     promptInput.focus();
 });
 
 async function sendMessage() {
     const text = promptInput.value.trim();
-    if (!text) return;
+    if (!text && !currentImageBase64) return;
 
-    addMessage('user', text);
+    const payload = {
+        text: text,
+        image: currentImageBase64
+    };
+
+    addMessage('user', text, currentImageBase64);
+    
     promptInput.value = '';
     promptInput.style.height = 'auto';
+    removeImagePreview();
 
     const thinkingId = addThinkingBubble();
     const startedAt = Date.now();
 
     promptInput.disabled = true;
     sendBtn.disabled = true;
+    uploadBtn.disabled = true;
 
     try {
         const response = await fetch('/prompt', {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: text
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -205,6 +208,7 @@ async function sendMessage() {
             setTimeout(() => {
                 promptInput.disabled = false;
                 sendBtn.disabled = false;
+                uploadBtn.disabled = false;
                 promptInput.focus();
             }, 150);
         }, remaining);
@@ -221,6 +225,7 @@ async function sendMessage() {
             setTimeout(() => {
                 promptInput.disabled = false;
                 sendBtn.disabled = false;
+                uploadBtn.disabled = false;
                 promptInput.focus();
             }, 150);
         }, remaining);
@@ -243,7 +248,7 @@ function removeThinkingBubble(id) {
     document.getElementById(id)?.remove();
 }
 
-function addMessage(sender, text) {
+function addMessage(sender, text, imageSrc = null) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${sender}`;
 
@@ -251,7 +256,50 @@ function addMessage(sender, text) {
         let html = text;
         try {
             if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
-                html = marked.parse(text);
+                const mathBlocks = [];
+                // Match block math ($$ or \[ \]) and inline math ($ or \()
+                const mathRegex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[\s\S]+?\$)/g;
+                
+                // 1. Swap math out for a safe placeholder string
+                let textWithPlaceholders = text.replace(mathRegex, (match) => {
+                    // Smart detection to ignore currencies and false-positives for inline math
+                    if (match.startsWith('$') && !match.startsWith('$$')) {
+                        const inner = match.slice(1, -1).trim();
+                        
+                        // Rule A: Pure numbers/currency (e.g., $10, $1,000.50, $5k, $10M)
+                        if (/^[\d.,]+[kKmMbB]?$/.test(inner)) return match;
+                        
+                        // Rule B: False positive between two currencies (e.g., "$10 and the cost is $20")
+                        // If it has spaces but NO math symbols (\, +, -, *, /, =, ^, _, etc.), it's normal text.
+                        if (inner.includes(' ') && !/[\\+\-*/=^_{}<>|]/.test(inner)) return match;
+                    }
+                    
+                    const id = mathBlocks.length;
+                    mathBlocks.push(match);
+                    return `KATEXMATHBLOCK${id}KATEXMATHBLOCK`;
+                });
+
+                // 2. Parse markdown safely without interfering with math characters
+                html = marked.parse(textWithPlaceholders);
+
+                // 3. Render and restore the math
+                html = html.replace(/KATEXMATHBLOCK(\d+)KATEXMATHBLOCK/g, (match, id) => {
+                    const originalMath = mathBlocks[id];
+                    const isBlock = originalMath.startsWith('$$') || originalMath.startsWith('\\[');
+                    const pureMath = originalMath.replace(/(^\$\$?|^\\\[|^\\\(|\$\$?$|\\\]$|\\\)$)/g, '');
+                    
+                    if (typeof katex !== 'undefined') {
+                        try {
+                            return katex.renderToString(pureMath, { 
+                                displayMode: isBlock, 
+                                throwOnError: false 
+                            });
+                        } catch(e) {
+                            console.error('KaTeX rendering error:', e);
+                        }
+                    }
+                    return originalMath;
+                });
             }
         } catch (e) {
             console.error('Markdown parsing failed:', e);
@@ -324,7 +372,23 @@ function addMessage(sender, text) {
         }, 50);
 
     } else {
-        msgDiv.textContent = text;
+        if (imageSrc) {
+            const img = document.createElement('img');
+            img.src = imageSrc;
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '300px';
+            img.style.borderRadius = '8px';
+            img.style.display = 'block';
+            if (text) {
+                img.style.marginBottom = '10px';
+            }
+            msgDiv.appendChild(img);
+        }
+        
+        if (text) {
+            const textNode = document.createTextNode(text);
+            msgDiv.appendChild(textNode);
+        }
     }
 
     chatContainer.appendChild(msgDiv);
