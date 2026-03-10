@@ -61,6 +61,11 @@ body {
     flex-direction: column;
 }
 
+/* Helper Class */
+.hidden {
+    display: none !important;
+}
+
 #chat-container {
     flex: 1;
     overflow-y: auto;
@@ -99,6 +104,56 @@ body {
     background: var(--grok-bg);
     color: var(--grok-text);
     border-bottom-left-radius: 4px;
+}
+
+/* File Preview Styles */
+.file-preview-container {
+    padding: 12px 16px;
+    background: var(--input-bg);
+    border-top: 1px solid var(--border);
+}
+
+.preview-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.preview-img {
+    max-height: 120px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.preview-file {
+    padding: 12px 16px;
+    background: var(--code-bg);
+    color: var(--text);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-family: monospace;
+    font-size: 14px;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.remove-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 10;
 }
 
 #input-container {
@@ -204,6 +259,7 @@ button:disabled {
     opacity: 1;
     background: #005ecb;
 }
+
 .message.thinking {
     opacity: 1 !important;
     transform: none !important;

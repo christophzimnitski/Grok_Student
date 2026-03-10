@@ -6,17 +6,36 @@
     <meta name="theme-color" content="#007aff" />
     <title>Grok Student</title>
     
+    <!-- Branding -->
+    <link rel="icon" href="/logo.png" />
+
+    <!-- Core Styles -->
     <link rel="stylesheet" href="style.css" />
+
+    <!-- KaTeX for math rendering -->
+    <link rel="stylesheet" href="katex.min.css" />
+
+    <!-- Preload both highlight.js themes -->
+    <link rel="stylesheet" href="github.min.css" id="hljs-light" />
+    <link rel="stylesheet" href="github-dark.min.css" id="hljs-dark" />
+
+    <!-- External Scripts (Deferred for performance) -->
+    <script src="marked.min.js" defer></script>
+    <script src="katex.min.js" defer></script>
+    <script src="highlight.min.js" defer></script>
+
+    <!-- App Script -->
+    <script type="module" src="app.js" defer></script>
 </head>
 <body data-theme="auto">
 
-    <div id="chat-container" aria-live="polite" role="log"></div>
+    <main id="chat-container" aria-live="polite" role="log"></main>
 
-    <div id="file-preview-container" style="display: none; padding: 12px 16px; background: var(--input-bg); border-top: 1px solid var(--border);">
-        <div style="position: relative; display: inline-block;">
-            <img id="preview-img" style="max-height: 120px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: none;">
-            <div id="preview-file" style="display: none; padding: 12px 16px; background: var(--code-bg); color: var(--text); border-radius: 8px; border: 1px solid var(--border); font-family: monospace; font-size: 14px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>
-            <button id="remove-btn" type="button" style="position: absolute; top: -10px; right: -10px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer; z-index: 10;">✕</button>
+    <div id="file-preview-container" class="hidden file-preview-container">
+        <div class="preview-wrapper">
+            <img id="preview-img" class="hidden preview-img" alt="File preview">
+            <div id="preview-file" class="hidden preview-file"></div>
+            <button id="remove-btn" type="button" class="remove-btn" aria-label="Remove file">✕</button>
         </div>
     </div>
 
@@ -29,21 +48,7 @@
     </div>
 
     <!-- Accept any file types to support docs and code files natively -->
-    <input type="file" id="file-input" accept="*/*" style="display: none;">
+    <input type="file" id="file-input" accept="*/*" class="hidden">
 
-    <!-- Markdown Parser -->
-    <script src="marked.min.js"></script>
-
-    <!-- KaTeX for math rendering -->
-    <link rel="stylesheet" href="katex.min.css" />
-    <script src="katex.min.js"></script>
-
-    <!-- Preload both highlight.js themes -->
-    <link rel="stylesheet" href="github.min.css" id="hljs-light" />
-    <link rel="stylesheet" href="github-dark.min.css" id="hljs-dark" />
-    <script src="highlight.min.js"></script>
-
-    <!-- App Script -->
-    <script type="module" src="app.js"></script>
 </body>
 </html>
