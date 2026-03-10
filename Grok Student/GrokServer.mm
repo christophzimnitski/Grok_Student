@@ -62,7 +62,7 @@
         NSDictionary *jsonBody = [NSJSONSerialization JSONObjectWithData:dataRequest.data options:0 error:&jsonError];
         
         NSString *userPrompt = nil;
-        NSString *base64Image = nil;
+        NSString *base64File = nil;
         
         if (jsonBody && [jsonBody isKindOfClass:[NSDictionary class]]) {
             id textObj = jsonBody[@"text"];
@@ -70,16 +70,22 @@
                 userPrompt = textObj;
             }
             
+            // Backwards compatibility for the original "image" key
             id imageObj = jsonBody[@"image"];
             if ([imageObj isKindOfClass:[NSString class]]) {
-                base64Image = imageObj;
+                base64File = imageObj;
+            }
+            
+            id fileDataObj = jsonBody[@"file_data"];
+            if ([fileDataObj isKindOfClass:[NSString class]]) {
+                base64File = fileDataObj;
             }
         } else {
             // Fallback for plain text parsing
             userPrompt = dataRequest.text;
         }
         
-        if ((!userPrompt || userPrompt.length == 0) && (!base64Image || base64Image.length == 0)) {
+        if ((!userPrompt || userPrompt.length == 0) && (!base64File || base64File.length == 0)) {
             return [GCDWebServerDataResponse responseWithText:@"Error: Empty prompt"];
         }
         
@@ -90,16 +96,16 @@
             [parts addObject:@{ @"text": userPrompt }];
         }
         
-        if (base64Image && base64Image.length > 0) {
-            NSString *cleanBase64 = base64Image;
-            NSRange range = [base64Image rangeOfString:@"base64,"];
+        if (base64File && base64File.length > 0) {
+            NSString *cleanBase64 = base64File;
+            NSRange range = [base64File rangeOfString:@"base64,"];
             if (range.location != NSNotFound) {
-                cleanBase64 = [base64Image substringFromIndex:range.location + range.length];
+                cleanBase64 = [base64File substringFromIndex:range.location + range.length];
                 
-                NSString *mimeType = @"image/jpeg"; // Default
-                NSRange mimeRange = [base64Image rangeOfString:@";"];
+                NSString *mimeType = @"application/octet-stream"; // Default for generic files
+                NSRange mimeRange = [base64File rangeOfString:@";"];
                 if (mimeRange.location != NSNotFound && mimeRange.location > 5) {
-                    mimeType = [base64Image substringWithRange:NSMakeRange(5, mimeRange.location - 5)];
+                    mimeType = [base64File substringWithRange:NSMakeRange(5, mimeRange.location - 5)];
                 }
                 
                 [parts addObject:@{
@@ -192,7 +198,7 @@
                         [content appendString:part[@"text"]];
                     } else if (part[@"inlineData"]) {
                         if (content.length > 0) [content appendString:@"\n"];
-                        [content appendString:@"[Image attached but ignored; Groq does not support image input in this mode]"];
+                        [content appendString:@"[File attached but ignored; Groq does not support file/image input in this mode]"];
                     }
                 }
 

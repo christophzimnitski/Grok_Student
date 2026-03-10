@@ -5,8 +5,9 @@ const clearBtn = document.getElementById('clear-btn');
 const themeToggle = document.getElementById('theme-toggle');
 const uploadBtn = document.getElementById('upload-btn');
 const fileInput = document.getElementById('file-input');
-const previewContainer = document.getElementById('image-preview-container');
+const previewContainer = document.getElementById('file-preview-container');
 const previewImg = document.getElementById('preview-img');
+const previewFile = document.getElementById('preview-file');
 const removeBtn = document.getElementById('remove-btn');
 
 function setupBranding() {
@@ -89,48 +90,93 @@ promptInput.addEventListener('input', () => {
     promptInput.style.height = `${promptInput.scrollHeight}px`;
 });
 
-let currentImageBase64 = null;
+let currentFileBase64 = null;
+let currentFileText = null;
+let currentFileName = null;
+let currentFileType = null;
 
-function showImagePreview(src) {
-    previewImg.src = src;
+function showFilePreview(src, name, type) {
+    if (src && type && type.startsWith('image/')) {
+        previewImg.src = src;
+        previewImg.style.display = 'block';
+        previewFile.style.display = 'none';
+    } else {
+        previewFile.textContent = '📄 ' + (name || 'Document Attached');
+        previewImg.style.display = 'none';
+        previewFile.style.display = 'block';
+    }
     previewContainer.style.display = 'block';
 }
 
-function removeImagePreview() {
-    currentImageBase64 = null;
+function removeFilePreview() {
+    currentFileBase64 = null;
+    currentFileText = null;
+    currentFileName = null;
+    currentFileType = null;
     previewImg.src = '';
+    previewImg.style.display = 'none';
+    previewFile.style.display = 'none';
     previewContainer.style.display = 'none';
     fileInput.value = '';
 }
 
-removeBtn.onclick = removeImagePreview;
+removeBtn.onclick = removeFilePreview;
+
+function handleFile(file) {
+    currentFileName = file.name;
+    currentFileType = file.type;
+
+    // Detect if this is a textual file (code, csv, logs, etc)
+    const isText = file.type.startsWith('text/') || 
+                   file.type === 'application/json' || 
+                   file.type === 'application/xml' ||
+                   file.type === 'application/javascript' ||
+                   ['.c', '.cpp', '.h', '.hpp', '.java', '.py', '.rb', '.swift', '.go', '.rs', '.php', '.md', '.csv', '.txt', '.kt', '.sh'].some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (isText) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            currentFileText = event.target.result;
+            currentFileBase64 = null;
+            showFilePreview(null, currentFileName, currentFileType);
+        };
+        reader.readAsText(file);
+    } else {
+        // Binary files (PDF, images, Office docs)
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            currentFileBase64 = event.target.result;
+            currentFileText = null;
+            showFilePreview(currentFileBase64, currentFileName, currentFileType);
+        };
+        reader.readAsDataURL(file);
+    }
+}
 
 fileInput.addEventListener('change', (e) => {
     if (e.target.files && e.target.files[0]) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            currentImageBase64 = event.target.result;
-            showImagePreview(currentImageBase64);
-        };
-        reader.readAsDataURL(e.target.files[0]);
+        handleFile(e.target.files[0]);
     }
 });
 
 uploadBtn.addEventListener('click', () => fileInput.click());
 
-// Handle pasting images
+// Handle pasting files
 promptInput.addEventListener('paste', (e) => {
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
     for (let index in items) {
         const item = items[index];
-        if (item.kind === 'file' && item.type.startsWith('image/')) {
+        if (item.kind === 'file') {
             const blob = item.getAsFile();
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                currentImageBase64 = event.target.result;
-                showImagePreview(currentImageBase64);
-            };
-            reader.readAsDataURL(blob);
+            if (blob) {
+                let fileName = blob.name || 'Pasted File';
+                if (fileName === 'image.png' && item.type.startsWith('image/')) fileName = 'Pasted Image';
+                
+                // Reconstruct with fallback naming
+                const newFile = new File([blob], fileName, { type: blob.type });
+                handleFile(newFile);
+                break; // Just handle the first pasted file
+            }
         }
     }
 });
@@ -155,24 +201,30 @@ clearBtn.addEventListener('click', async () => {
     addMessage('grok', WELCOME_MESSAGE);
     promptInput.value = '';
     promptInput.style.height = 'auto';
-    removeImagePreview();
+    removeFilePreview();
     promptInput.focus();
 });
 
 async function sendMessage() {
     const text = promptInput.value.trim();
-    if (!text && !currentImageBase64) return;
+    if (!text && !currentFileBase64 && !currentFileText) return;
+
+    let finalPayloadText = text;
+    // For text/code files, inject the contents natively into the prompt to preserve context
+    if (currentFileText) {
+        finalPayloadText += `\n\n--- Attached File: ${currentFileName} ---\n${currentFileText}`;
+    }
 
     const payload = {
-        text: text,
-        image: currentImageBase64
+        text: finalPayloadText,
+        file_data: currentFileBase64
     };
 
-    addMessage('user', text, currentImageBase64);
+    addMessage('user', text, currentFileBase64, currentFileName, currentFileType, currentFileText !== null);
     
     promptInput.value = '';
     promptInput.style.height = 'auto';
-    removeImagePreview();
+    removeFilePreview();
 
     const thinkingId = addThinkingBubble();
     const startedAt = Date.now();
@@ -248,7 +300,7 @@ function removeThinkingBubble(id) {
     document.getElementById(id)?.remove();
 }
 
-function addMessage(sender, text, imageSrc = null) {
+function addMessage(sender, text, fileSrc = null, fileName = null, fileType = null, isTextFile = false) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${sender}`;
 
@@ -372,17 +424,29 @@ function addMessage(sender, text, imageSrc = null) {
         }, 50);
 
     } else {
-        if (imageSrc) {
-            const img = document.createElement('img');
-            img.src = imageSrc;
-            img.style.maxWidth = '100%';
-            img.style.maxHeight = '300px';
-            img.style.borderRadius = '8px';
-            img.style.display = 'block';
-            if (text) {
-                img.style.marginBottom = '10px';
+        if (fileSrc || isTextFile) {
+            if (fileType && fileType.startsWith('image/') && fileSrc) {
+                const img = document.createElement('img');
+                img.src = fileSrc;
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '300px';
+                img.style.borderRadius = '8px';
+                img.style.display = 'block';
+                if (text) {
+                    img.style.marginBottom = '10px';
+                }
+                msgDiv.appendChild(img);
+            } else {
+                const docDiv = document.createElement('div');
+                docDiv.style.padding = '10px 14px';
+                docDiv.style.background = 'rgba(255, 255, 255, 0.2)';
+                docDiv.style.borderRadius = '6px';
+                docDiv.style.fontFamily = 'monospace';
+                docDiv.style.fontSize = '14px';
+                docDiv.style.marginBottom = text ? '10px' : '0';
+                docDiv.textContent = '📄 ' + (fileName || 'Document');
+                msgDiv.appendChild(docDiv);
             }
-            msgDiv.appendChild(img);
         }
         
         if (text) {
