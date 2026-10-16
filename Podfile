@@ -1,6 +1,6 @@
 platform :ios, '13.0'
 target 'Grok Student' do
-  pod 'GCDWebServer', '~> 3.0'  # Or latest
+  pod 'GCDWebServer', '~> 3.0'
 
 end
 

@@ -1,0 +1,6 @@
+// Code signing settings for building on a real device.
+// Put your Apple developer team ID in Signing.local.xcconfig, which is not
+// committed, for example:
+//   DEVELOPMENT_TEAM = ABCDE12345
+// Simulator builds do not need it.
+#include? "Signing.local.xcconfig"

@@ -1,6 +1,0 @@
-framework module Pods_Grok_Student {
-  umbrella header "Pods-Grok Student-umbrella.h"
-
-  export *
-  module * { export * }
-}
